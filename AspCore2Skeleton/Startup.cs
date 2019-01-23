@@ -1,6 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Net;
+using System.Net.Http;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Identity;
@@ -11,8 +13,13 @@ using Microsoft.AspNetCore.HttpsPolicy;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using AspCore2Skeleton.Data;
+using AspCore2Skeleton.Extension;
+using AspCore2Skeleton.Models;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Http;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Serialization;
 
 namespace AspCore2Skeleton
 {
@@ -42,7 +49,40 @@ namespace AspCore2Skeleton
                 .AddDefaultUI(UIFramework.Bootstrap4)
                 .AddEntityFrameworkStores<ApplicationDbContext>();
 
-            services.AddMvc().SetCompatibilityVersion(CompatibilityVersion.Version_2_2);
+            services.AddMvc().SetCompatibilityVersion(CompatibilityVersion.Latest)
+                .AddJsonOptions(options =>
+                {
+                    options.SerializerSettings.ContractResolver = new DefaultContractResolver();
+                    options.SerializerSettings.DefaultValueHandling = DefaultValueHandling.Include;
+                    options.SerializerSettings.NullValueHandling = NullValueHandling.Ignore;
+                });
+
+            services.AddCors(options =>
+                options.AddPolicy("MyPolicy", policy => policy.AllowAnyOrigin().WithMethods("GET", "POST")));
+
+            //services.AddSwagger();
+
+            services.AddSingleton<IHttpContextAccessor, HttpContextAccessor>();
+            var globalVars = Configuration.GetSection("AppSettings").Get<GlobalVars>();
+
+            services.AddHttpClient("myapp", c =>
+            {
+                c.BaseAddress = new Uri(globalVars.ApiUrl);
+                c.DefaultRequestHeaders.Add("Accept", "application/json");
+                c.DefaultRequestHeaders.Add("Accept-Encoding", "gzip, deflate");
+                c.Timeout = TimeSpan.FromSeconds(2000);
+            }).ConfigurePrimaryHttpMessageHandler(x => new HttpClientHandler()
+            {
+                AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate
+            }).SetHandlerLifetime(TimeSpan.FromMinutes(10));
+            // remove Logging, please refer to https://github.com/aspnet/HttpClientFactory/blob/master/src/Microsoft.Extensions.Http/DependencyInjection/HttpClientFactoryServiceCollectionExtensions.cs#L49
+            services.Where(s => s.ServiceType == typeof(IHttpMessageHandlerBuilderFilter)).ToList().ForEach(it =>
+            {
+                services.Remove(it);
+            });
+
+            services.ServiceAutoRegister(System.Reflection.Assembly.GetExecutingAssembly());
+
         }
 
         // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.

@@ -14,6 +14,8 @@ namespace AspCore2Skeleton
     {
         public static void Main(string[] args)
         {
+            //add log before running
+
             CreateWebHostBuilder(args).Build().Run();
         }
 
